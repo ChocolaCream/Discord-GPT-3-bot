@@ -10,16 +10,41 @@ client = discord.Client(intents=discord.Intents.all(), messages=True, activity=a
 
 @client.event
 async def on_message(message):
-    #initialize string to be used for openAI API prompt 
-    promptText = """Respond to messages:"""
 
-    if message.author == client.user:
-        emoji = '❤'
-        await message.add_reaction(emoji)
-        return
     if message.content.startswith("$"):
         #store userID who called command in user
-        user = message.author
+        user = message.author.name
+        print("Sender name is: " + user)
+
+        #read memory file
+        filename = user + '.txt'
+        
+        #open memory file for specific user
+        try: # check if file already exists or not
+            f = open(filename, "r")
+        except FileNotFoundError: # file did not pre-exist, create memory file
+            print("file does not exist, creating file")
+            f = open(filename, "w+")
+        else: # file existed
+            print("file exists, continuing with program")
+        finally: # close file and end
+            print("closing file")
+            f.close()
+        
+        #read memory to memory variable
+        f = open(filename, "r")
+        memory = f.read()
+        f.close()
+
+        memoryLength = len(memory)
+        print("Length of memory string: " + memoryLength)
+        
+        if memoryLength > 8000:
+            print("Token count estimated above 2000. Shortening string for optimized generation")
+            print("Memory length prior to shortening: " + memoryLength)
+            memory = memory[memoryLength-8000:]
+            memoryLength = len(memory)
+            print("Memory length post shortening: " + memoryLength)
         
         #variable msg = message string
         msg = message.content[1:]
@@ -28,12 +53,14 @@ async def on_message(message):
         print("user message is: " + msg)
         print("waiting for openAI API response")
 
-        promptText += msg+"""\nRespond here: """ #tell GPT-3 to respond to the user message in the API prompt
-        model = "text-davinci-002" #replace with "text-ada-001" for simple text
+        memory += user + ": " + msg+"""\nFelix: """ #tell GPT-3 to respond to the user message in the API prompt
+        model = "text-davinci-003" #replace with "text-ada-001" for simple text
+        
         async with message.channel.typing():
+            
             responsePassed = openai.Completion.create(
                         model=model, #which GPT-3 model 
-                        prompt=promptText, #prompt to send API
+                        prompt=memory, #prompt to send API
                         temperature=1.0, #temperature is randomness (higher more random, range 1-0)
                         max_tokens=150, #max length for processing and text generation
                         top_p=0.3,
@@ -43,9 +70,16 @@ async def on_message(message):
             #get string for response 
             responsePassed = responsePassed.choices[0].text
             print("OpenAI API response recived as: "+ responsePassed)
+
+            # write responce to update file
+            memory += responsePassed
+            f = open(filename, "w")
+            f.write(memory)
+            f.close()
+
             print("Responding with response...")
-            #show bot is typing for time (string length*0.1 seconds)
-            await asyncio.sleep(len(responsePassed)*0.1)
+            #show bot is typing for time (string length*0.01 seconds)
+            await asyncio.sleep(len(responsePassed)*0.01)
             #after waiting send response in channel/DM where command was called from
             await message.channel.send(responsePassed)
             
